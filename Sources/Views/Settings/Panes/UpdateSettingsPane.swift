@@ -56,8 +56,8 @@ struct UpdateSettingsPane: View {
 
             // Check now button
             HStack(spacing: DSSpacing.lg) {
-                Text("")
-                    .frame(width: 120)
+                Color.clear
+                    .frame(width: 120, height: 1)
 
                 Button {
                     Task { await updateService.checkForUpdates() }
@@ -108,11 +108,9 @@ struct UpdateSettingsPane: View {
     // MARK: - Computed Helpers
 
     private var lastCheckedText: String {
-        let defaults = UserDefaults.standard
-        let timestamp = defaults.double(forKey: "vs_lastUpdateCheck")
-        guard timestamp > 0 else { return "Никогда" }
+        let date = updateService.lastCheckDate
+        guard date != .distantPast else { return "Никогда" }
 
-        let date = Date(timeIntervalSince1970: timestamp)
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date())

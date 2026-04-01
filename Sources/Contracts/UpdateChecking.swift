@@ -59,6 +59,8 @@ protocol UpdateChecking: AnyObject, Observable {
     var state: UpdateState { get }
     /// The user's preferred update channel.
     var updateChannel: UpdateChannel { get }
+    /// Timestamp of the last successful check.
+    var lastCheckDate: Date { get }
     /// Check GitHub for a newer release.
     func checkForUpdates() async
     /// Download the DMG for the given update.

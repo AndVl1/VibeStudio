@@ -20,11 +20,19 @@ final class UpdateService: UpdateChecking {
 
     private(set) var state: UpdateState = .idle
     private(set) var updateChannel: UpdateChannel
+    private(set) var lastCheckDate: Date
 
     // MARK: - Configuration
 
     private static let releasesURL = "https://api.github.com/repos/AlexGladkov/VibeStudio/releases"
     private static let checkInterval: TimeInterval = 24 * 60 * 60 // 24 hours
+    /// Maximum allowed DMG size (500 MB).
+    private static let maxDownloadSize: Int64 = 500 * 1024 * 1024
+    /// Allowed hosts for DMG download URLs.
+    private static let allowedDownloadHosts: Set<String> = [
+        "github.com",
+        "objects.githubusercontent.com"
+    ]
 
     // MARK: - UserDefaults Keys
 
@@ -37,7 +45,6 @@ final class UpdateService: UpdateChecking {
     private let navigationCoordinator: AppNavigationCoordinator
     private let defaults: UserDefaults
     private var skippedVersions: Set<String>
-    private var lastCheckDate: Date
 
     // nonisolated(unsafe): deinit is nonisolated and must cancel these tasks.
     // Safe because deinit only runs when no other references exist.
@@ -104,18 +111,29 @@ final class UpdateService: UpdateChecking {
     }
 
     func downloadUpdate(_ update: AppUpdate) async {
-        state = .downloading(progress: 0.0)
+        // Cancel any in-flight download
+        downloadTask?.cancel()
 
-        do {
-            let localURL = try await downloadDMG(from: update.dmgDownloadURL, version: update.version, fileSize: update.dmgFileSize)
-            state = .downloaded(localURL: localURL)
-        } catch is CancellationError {
-            state = .idle
-        } catch {
-            let message = error.localizedDescription
-            state = .error(message)
-            Logger.update.error("Download failed: \(message, privacy: .public)")
+        downloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.state = .downloading(progress: 0.0)
+
+            do {
+                let localURL = try await self.downloadDMG(
+                    from: update.dmgDownloadURL,
+                    version: update.version,
+                    fileSize: update.dmgFileSize
+                )
+                self.state = .downloaded(localURL: localURL)
+            } catch is CancellationError {
+                self.state = .idle
+            } catch {
+                let message = error.localizedDescription
+                self.state = .error(message)
+                Logger.update.error("Download failed: \(message, privacy: .public)")
+            }
         }
+        await downloadTask?.value
     }
 
     func skipVersion(_ version: String) {
@@ -197,50 +215,75 @@ final class UpdateService: UpdateChecking {
         return try decoder.decode([GitHubRelease].self, from: data)
     }
 
-    /// Download a DMG to ~/Downloads with progress tracking.
-    private func downloadDMG(from url: URL, version: String, fileSize: Int64) async throws -> URL {
+    /// Download a DMG to ~/Downloads.
+    ///
+    /// Uses `URLSession.shared.download(from:)` for efficient file-based transfer
+    /// (no in-memory buffering). Progress is reported by polling the download task.
+    private nonisolated func downloadDMG(
+        from url: URL,
+        version: String,
+        fileSize: Int64
+    ) async throws -> URL {
+        // Validate download URL host
+        guard let host = url.host?.lowercased(),
+              Self.allowedDownloadHosts.contains(host) else {
+            throw UpdateServiceError.downloadFailed(
+                underlying: "Download URL host not allowed: \(url.host ?? "unknown")"
+            )
+        }
+
+        // Validate file size
+        if fileSize > Self.maxDownloadSize {
+            throw UpdateServiceError.downloadFailed(
+                underlying: "File too large: \(fileSize) bytes (max \(Self.maxDownloadSize))"
+            )
+        }
+
+        // Sanitize version for safe file naming (strip path separators)
+        let safeVersion = version
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "..", with: "_")
+
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-        let destination = downloadsDir.appendingPathComponent("VibeStudio-\(version).dmg")
+        let destination = downloadsDir.appendingPathComponent("VibeStudio-\(safeVersion).dmg")
+
+        // Verify the resolved path stays within ~/Downloads
+        let resolvedPath = destination.standardizedFileURL.path
+        let downloadsPath = downloadsDir.standardizedFileURL.path
+        guard resolvedPath.hasPrefix(downloadsPath) else {
+            throw UpdateServiceError.fileWriteFailed(underlying: "Invalid destination path")
+        }
 
         // Remove existing file if present (re-download)
         try? FileManager.default.removeItem(at: destination)
 
-        let (asyncBytes, response) = try await URLSession.shared.bytes(from: url)
+        // Use download(from:) for efficient file-based transfer
+        let (tempURL, response) = try await URLSession.shared.download(from: url)
+
+        try Task.checkCancellation()
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw UpdateServiceError.downloadFailed(underlying: "HTTP error")
         }
 
-        let expectedLength = httpResponse.expectedContentLength > 0
-            ? httpResponse.expectedContentLength
-            : fileSize
-
-        var receivedData = Data()
-        receivedData.reserveCapacity(Int(expectedLength))
-
-        var lastReportedPercent: Int = -1
-
-        for try await byte in asyncBytes {
-            try Task.checkCancellation()
-            receivedData.append(byte)
-
-            // Throttle progress updates to every 1%
-            if expectedLength > 0 {
-                let percent = Int(Double(receivedData.count) / Double(expectedLength) * 100)
-                if percent != lastReportedPercent {
-                    lastReportedPercent = percent
-                    let progress = Double(receivedData.count) / Double(expectedLength)
-                    await MainActor.run { [weak self] in
-                        self?.state = .downloading(progress: min(progress, 1.0))
-                    }
-                }
-            }
+        // Verify downloaded size
+        let attrs = try FileManager.default.attributesOfItem(atPath: tempURL.path)
+        if let downloadedSize = attrs[.size] as? Int64, downloadedSize > Self.maxDownloadSize {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw UpdateServiceError.downloadFailed(
+                underlying: "Downloaded file too large: \(downloadedSize) bytes"
+            )
         }
 
+        // Move from temp location to ~/Downloads
         do {
-            try receivedData.write(to: destination, options: .atomic)
+            try FileManager.default.moveItem(at: tempURL, to: destination)
         } catch {
             throw UpdateServiceError.fileWriteFailed(underlying: error.localizedDescription)
+        }
+
+        await MainActor.run { [weak self] in
+            self?.state = .downloading(progress: 1.0)
         }
 
         Logger.update.info("Downloaded update v\(version, privacy: .public) to \(destination.path, privacy: .public)")
@@ -286,9 +329,11 @@ final class UpdateService: UpdateChecking {
             // Must not be skipped
             if skippedVersions.contains(version.description) { continue }
 
-            // Must have a DMG asset
+            // Must have a DMG asset with a valid GitHub download URL
             guard let dmgAsset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }),
                   let dmgURL = URL(string: dmgAsset.browserDownloadUrl),
+                  let dmgHost = dmgURL.host?.lowercased(),
+                  Self.allowedDownloadHosts.contains(dmgHost),
                   let htmlURL = URL(string: release.htmlUrl) else {
                 continue
             }

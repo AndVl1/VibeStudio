@@ -53,14 +53,14 @@ struct SemanticVersion: Comparable, Equatable, Sendable, CustomStringConvertible
         }
 
         // Parse major.minor.patch
-        let parts = base.split(separator: ".", maxSplits: 3)
+        let parts = base.split(separator: ".", maxSplits: 2)
         guard parts.count >= 2, parts.count <= 3 else { return nil }
 
-        guard let major = Int(parts[0]),
-              let minor = Int(parts[1]) else { return nil }
+        guard let major = Int(parts[0]), major >= 0,
+              let minor = Int(parts[1]), minor >= 0 else { return nil }
         let patch: Int
         if parts.count == 3 {
-            guard let p = Int(parts[2]) else { return nil }
+            guard let p = Int(parts[2]), p >= 0 else { return nil }
             patch = p
         } else {
             patch = 0
