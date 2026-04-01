@@ -25,4 +25,7 @@ final class AppNavigationCoordinator {
     ///
     /// `RootView` observes this and calls `openSettings()`, then resets to `false`.
     var showingSettings: Bool = false
+
+    /// The update to present in a sheet. Set to `nil` to dismiss.
+    var availableUpdate: AppUpdate?
 }

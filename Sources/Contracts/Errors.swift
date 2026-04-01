@@ -152,6 +152,41 @@ enum AgentError: LocalizedError, Sendable {
     }
 }
 
+// MARK: - UpdateServiceError
+
+/// Errors produced by ``UpdateService``.
+enum UpdateServiceError: LocalizedError, Sendable {
+    /// Network request failed.
+    case networkError(underlying: String)
+    /// GitHub API rate limit exceeded.
+    case rateLimited
+    /// No release found matching current channel/platform.
+    case noCompatibleRelease
+    /// Version tag could not be parsed.
+    case invalidVersionFormat(String)
+    /// DMG download failed.
+    case downloadFailed(underlying: String)
+    /// Could not write downloaded file to disk.
+    case fileWriteFailed(underlying: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .networkError(let reason):
+            return "Network error: \(reason)"
+        case .rateLimited:
+            return "GitHub API rate limit exceeded. Try again later."
+        case .noCompatibleRelease:
+            return "No compatible release found"
+        case .invalidVersionFormat(let tag):
+            return "Invalid version format: \(tag)"
+        case .downloadFailed(let reason):
+            return "Download failed: \(reason)"
+        case .fileWriteFailed(let reason):
+            return "File write failed: \(reason)"
+        }
+    }
+}
+
 // MARK: - FileSystemWatcherError
 
 enum FileSystemWatcherError: LocalizedError, Sendable {

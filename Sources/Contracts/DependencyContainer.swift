@@ -60,6 +60,12 @@ final class ServiceContainer {
     /// `themeService`: SwiftUI observation tracking requires direct access.
     let freeTabStore: FreeTabStore
 
+    /// In-app update checker service.
+    ///
+    /// Concrete `@Observable` type for the same reason as `themeService` and
+    /// `freeTabStore`: SwiftUI observation tracking requires direct access.
+    let updateService: UpdateService
+
     init(
         projectManager: any ProjectManaging,
         terminalSessionManager: any TerminalSessionManaging,
@@ -73,7 +79,8 @@ final class ServiceContainer {
         appReadyState: AppReadyState,
         navigationCoordinator: AppNavigationCoordinator,
         themeService: ThemeService,
-        freeTabStore: FreeTabStore
+        freeTabStore: FreeTabStore,
+        updateService: UpdateService
     ) {
         self.projectManager = projectManager
         self.terminalSessionManager = terminalSessionManager
@@ -88,6 +95,7 @@ final class ServiceContainer {
         self.navigationCoordinator = navigationCoordinator
         self.themeService = themeService
         self.freeTabStore = freeTabStore
+        self.updateService = updateService
     }
 }
 
@@ -138,6 +146,12 @@ private struct ThemeServiceKey: EnvironmentKey {
 
 private struct FreeTabStoreKey: EnvironmentKey {
     @MainActor static let defaultValue: FreeTabStore = FreeTabStore()
+}
+
+private struct UpdateServiceKey: EnvironmentKey {
+    @MainActor static let defaultValue: UpdateService = UpdateService(
+        navigationCoordinator: AppNavigationCoordinator()
+    )
 }
 
 extension EnvironmentValues {
@@ -195,6 +209,11 @@ extension EnvironmentValues {
         get { self[FreeTabStoreKey.self] }
         set { self[FreeTabStoreKey.self] = newValue }
     }
+
+    var updateService: UpdateService {
+        get { self[UpdateServiceKey.self] }
+        set { self[UpdateServiceKey.self] = newValue }
+    }
 }
 
 // MARK: - View Modifier for injecting all services
@@ -235,6 +254,7 @@ extension View {
             .environment(\.navigationCoordinator, container.navigationCoordinator)
             .environment(\.themeService, container.themeService)
             .environment(\.freeTabStore, container.freeTabStore)
+            .environment(\.updateService, container.updateService)
     }
 }
 

@@ -34,4 +34,7 @@ extension Logger {
 
     /// Service-layer events: agent availability, keychain, path resolution.
     static let services = Logger(subsystem: subsystem, category: "Services")
+
+    /// Update checking and download operations.
+    static let update = Logger(subsystem: subsystem, category: "Update")
 }

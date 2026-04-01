@@ -34,7 +34,7 @@ let package = Package(
         .testTarget(
             name: "VibeStudioTests",
             dependencies: ["VibeStudio"],
-            path: "VibeStudioTests"
+            path: "Tests"
         )
     ]
 )

@@ -113,6 +113,16 @@ struct RootView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
+        .sheet(
+            isPresented: Binding(
+                get: { navigationCoordinator.availableUpdate != nil },
+                set: { if !$0 { navigationCoordinator.availableUpdate = nil } }
+            )
+        ) {
+            if let update = navigationCoordinator.availableUpdate {
+                UpdateAvailableSheet(update: update)
+            }
+        }
         .onChange(of: navigationCoordinator.showingSettings) { _, newValue in
             if newValue {
                 showSettings = true

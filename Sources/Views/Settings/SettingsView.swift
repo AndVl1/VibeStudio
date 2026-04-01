@@ -92,7 +92,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func itemIcon(_ item: SettingsItem, isSelected: Bool) -> some View {
         switch item {
-        case .appearance:
+        case .appearance, .updates:
             Image(systemName: item.systemImage)
                 .font(.system(size: 12))
                 .foregroundStyle(isSelected ? DSColor.accentPrimary : DSColor.textSecondary)
@@ -110,6 +110,8 @@ struct SettingsView: View {
             switch selectedItem {
             case .appearance:
                 GeneralSettingsPane()
+            case .updates:
+                UpdateSettingsPane()
             case .llmAssistant(let assistant):
                 LLMSettingsPane(assistant: assistant)
             }

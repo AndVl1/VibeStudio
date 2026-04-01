@@ -89,12 +89,15 @@ final class AppLifecycleCoordinator {
             terminalService.killAllSessions(for: projectId)
         }
 
-        // 3. Stop git status polling and observation tasks.
+        // 3. Stop update checker.
+        container.updateService.stopPeriodicChecks()
+
+        // 4. Stop git status polling and observation tasks.
         container.gitStatusPoller.stopPolling()
         activeProjectObservation?.cancel()
         fileEventObservation?.cancel()
 
-        // 4. Stop all file watchers (also finishes the events AsyncStream).
+        // 5. Stop all file watchers (also finishes the events AsyncStream).
         container.fileSystemWatcher.unwatchAll()
     }
 
@@ -124,6 +127,9 @@ final class AppLifecycleCoordinator {
         await restoreSession()
         startActiveProjectObservation()
         startFileEventForwarding()
+
+        // Start periodic update checks (GitHub releases).
+        container.updateService.startPeriodicChecks()
     }
 
     // MARK: - Private: Session Management

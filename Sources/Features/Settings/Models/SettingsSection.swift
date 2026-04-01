@@ -25,7 +25,7 @@ enum SettingsSectionGroup: String, CaseIterable, Identifiable {
     var items: [SettingsItem] {
         switch self {
         case .general:
-            return [.appearance]
+            return [.appearance, .updates]
         case .llm:
             return AIAssistant.allCases.map { .llmAssistant($0) }
         }
@@ -37,12 +37,15 @@ enum SettingsSectionGroup: String, CaseIterable, Identifiable {
 /// Individual navigation item in the settings sidebar.
 enum SettingsItem: Hashable, Identifiable {
     case appearance
+    case updates
     case llmAssistant(AIAssistant)
 
     var id: String {
         switch self {
         case .appearance:
             return "appearance"
+        case .updates:
+            return "updates"
         case .llmAssistant(let assistant):
             return "llm-\(assistant.rawValue)"
         }
@@ -52,6 +55,7 @@ enum SettingsItem: Hashable, Identifiable {
     var sectionGroup: SettingsSectionGroup {
         switch self {
         case .appearance:        return .general
+        case .updates:           return .general
         case .llmAssistant:      return .llm
         }
     }
@@ -61,6 +65,8 @@ enum SettingsItem: Hashable, Identifiable {
         switch self {
         case .appearance:
             return "Внешний вид"
+        case .updates:
+            return "Обновления"
         case .llmAssistant(let assistant):
             return assistant.displayName.capitalized
         }
@@ -70,6 +76,7 @@ enum SettingsItem: Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case .appearance:        return "folder.fill"
+        case .updates:           return "arrow.triangle.2.circlepath"
         case .llmAssistant:      return "brain"
         }
     }
